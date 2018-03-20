@@ -50,6 +50,11 @@ public class AnnotationProcessingTaskFactory implements ITaskFactory {
     }
 
     @Override
+    public <S extends TaskInternal> S create(String name, Class<S> type) {
+        return process(create(name, type, (Object[]) null));
+    }
+
+    @Override
     public <S extends TaskInternal> S create(String name, Class<S> type, Object... args) {
         return process(taskFactory.create(name, type, args));
     }

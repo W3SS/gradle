@@ -113,6 +113,11 @@ public class TaskFactory implements ITaskFactory {
     }
 
     @Override
+    public <S extends TaskInternal> S create(String name, final Class<S> type) {
+        return create(name, type, (Object[]) null);
+    }
+
+    @Override
     public <S extends TaskInternal> S create(String name, final Class<S> type, final Object... args) {
         if (!Task.class.isAssignableFrom(type)) {
             throw new InvalidUserDataException(String.format(

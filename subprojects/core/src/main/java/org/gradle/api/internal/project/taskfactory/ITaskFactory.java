@@ -19,10 +19,11 @@ import org.gradle.api.Task;
 import org.gradle.api.internal.TaskInternal;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.internal.reflect.Instantiator;
+import org.gradle.model.internal.core.NamedEntityInstantiator;
 
 import java.util.Map;
 
-public interface ITaskFactory {
+public interface ITaskFactory extends NamedEntityInstantiator<TaskInternal> {
     ITaskFactory createChild(ProjectInternal project, Instantiator instantiator);
 
     TaskInternal createTask(Map<String, ?> args);
