@@ -105,8 +105,11 @@ public class TaskFactory implements ITaskFactory {
     }
 
     @Override
-    public <S extends TaskInternal> S create(String name, final Class<S> type) {
-        return create(name, type, (Object[]) null);
+    public TaskInternal createTask(String name, Class<? extends Task> type, Object... args) {
+        if (type.isAssignableFrom(TaskInternal.class)) {
+            return create(name, TaskInternal.class, args);
+        }
+        return create(name, type.asSubclass(TaskInternal.class), args);
     }
 
     @Override
