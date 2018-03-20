@@ -34,12 +34,16 @@ dependencies {
 
     compile libraries.groovy.coordinates
     compile project(':baseServices')
-    compile libraries.slf4j_api.coordinates
     compile project(':internalIntegTesting')
-    compile libraries.jatl.coordinates
-    compile libraries.jgit.coordinates, libraries.commons_httpclient.coordinates, libraries.jsch.coordinates
 
-    runtime 'com.h2database:h2:1.4.192'
+    compile libraries.slf4j_api.coordinates
+    compile libraries.jatl.coordinates
+    compile libraries.jgit.coordinates
+    compile libraries.commons_httpclient.coordinates
+    compile libraries.jsch.coordinates
+    compile libraries.commons_math.coordinates
+
+    runtimeOnly 'com.h2database:h2:1.4.192'
 }
 
 gradlebuildJava {

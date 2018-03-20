@@ -287,8 +287,10 @@ class CrossVersionPerformanceTestRunnerTest extends ResultSpecification {
         when:
         1 * experimentRunner.run(_, _) >> { BuildExperimentSpec spec, MeasuredOperationList result ->
             result.add(operation(totalTime: Duration.seconds(10)))
+            result.add(operation(totalTime: Duration.seconds(10)))
         }
         1 * experimentRunner.run(_, _) >> { BuildExperimentSpec spec, MeasuredOperationList result ->
+            result.add(operation(totalTime: Duration.seconds(5)))
             result.add(operation(totalTime: Duration.seconds(5)))
         }
         def results = runner.run()
@@ -296,6 +298,52 @@ class CrossVersionPerformanceTestRunnerTest extends ResultSpecification {
 
         then: "without overrides, test fails"
         thrown(AssertionError)
+    }
+
+    def "insignificant regressions are ignored"() {
+        given:
+        def runner = runner()
+        runner.targetVersions = ['last']
+
+        when:
+        1 * experimentRunner.run(_, _) >> { BuildExperimentSpec spec, MeasuredOperationList result ->
+            result.add(operation(totalTime: Duration.seconds(5.0)))
+            result.add(operation(totalTime: Duration.seconds(5.1)))
+            result.add(operation(totalTime: Duration.seconds(5.2)))
+        }
+        1 * experimentRunner.run(_, _) >> { BuildExperimentSpec spec, MeasuredOperationList result ->
+            result.add(operation(totalTime: Duration.seconds(5.0)))
+            result.add(operation(totalTime: Duration.seconds(5.1)))
+            result.add(operation(totalTime: Duration.seconds(5.1)))
+
+        }
+        def results = runner.run()
+
+        then:
+        results.assertCurrentVersionHasNotRegressed()
+    }
+
+    def "outliers are ignored"() {
+        given:
+        def runner = runner()
+        runner.targetVersions = ['last']
+
+        when:
+        1 * experimentRunner.run(_, _) >> { BuildExperimentSpec spec, MeasuredOperationList result ->
+            9.times {
+                result.add(operation(totalTime: Duration.seconds(5)))
+            }
+            result.add(operation(totalTime: Duration.seconds(100)))
+        }
+        1 * experimentRunner.run(_, _) >> { BuildExperimentSpec spec, MeasuredOperationList result ->
+            10.times {
+                result.add(operation(totalTime: Duration.seconds(5)))
+            }
+        }
+        def results = runner.run()
+
+        then:
+        results.assertCurrentVersionHasNotRegressed()
     }
 
     def "a performance regression is identified in speed but we check for nothing"() {
@@ -307,49 +355,11 @@ class CrossVersionPerformanceTestRunnerTest extends ResultSpecification {
         System.setProperty('org.gradle.performance.execution.checks', 'none')
         1 * experimentRunner.run(_, _) >> { BuildExperimentSpec spec, MeasuredOperationList result ->
             result.add(operation(totalTime: Duration.seconds(10)))
+            result.add(operation(totalTime: Duration.seconds(10)))
         }
         1 * experimentRunner.run(_, _) >> { BuildExperimentSpec spec, MeasuredOperationList result ->
             result.add(operation(totalTime: Duration.seconds(5)))
-        }
-        def results = runner.run()
-        results.assertCurrentVersionHasNotRegressed()
-
-        then: "test passes"
-        noExceptionThrown()
-    }
-
-    def "a performance regression is identified in memory but we only check for speed"() {
-        given:
-        def runner = runner()
-        runner.targetVersions = ['last']
-
-        when:
-        System.setProperty('org.gradle.performance.execution.checks', 'speed')
-        1 * experimentRunner.run(_, _) >> { BuildExperimentSpec spec, MeasuredOperationList result ->
-            result.add(operation(totalTime: Duration.seconds(10)))
-        }
-        1 * experimentRunner.run(_, _) >> { BuildExperimentSpec spec, MeasuredOperationList result ->
-            result.add(operation(totalTime: Duration.seconds(10), totalMemoryUsed: DataAmount.kbytes(5)))
-        }
-        def results = runner.run()
-        results.assertCurrentVersionHasNotRegressed()
-
-        then: "test passes"
-        noExceptionThrown()
-    }
-
-    def "a performance regression is identified in memory but we only check for nothing"() {
-        given:
-        def runner = runner()
-        runner.targetVersions = ['last']
-
-        when:
-        System.setProperty('org.gradle.performance.execution.checks', 'none')
-        1 * experimentRunner.run(_, _) >> { BuildExperimentSpec spec, MeasuredOperationList result ->
-            result.add(operation(totalTime: Duration.seconds(10)))
-        }
-        1 * experimentRunner.run(_, _) >> { BuildExperimentSpec spec, MeasuredOperationList result ->
-            result.add(operation(totalTime: Duration.seconds(10), totalMemoryUsed: DataAmount.kbytes(5)))
+            result.add(operation(totalTime: Duration.seconds(5)))
         }
         def results = runner.run()
         results.assertCurrentVersionHasNotRegressed()

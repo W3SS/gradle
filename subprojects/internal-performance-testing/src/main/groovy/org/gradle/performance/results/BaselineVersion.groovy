@@ -17,18 +17,23 @@
 package org.gradle.performance.results
 
 import groovy.transform.CompileStatic
+import org.apache.commons.math3.stat.descriptive.SummaryStatistics
+import org.apache.commons.math3.stat.inference.TestUtils
 import org.gradle.performance.measure.Amount
+import org.gradle.performance.measure.DataSeries
 import org.gradle.performance.measure.Duration
 
 import static PrettyCalculator.toMillis
 
+/**
+ * Allows comparing one Gradle version's results against another, using a one-sided t-test with a minimum confidence of 95%.
+ *
+ * See https://en.wikipedia.org/wiki/Student%27s_t-test
+ */
 @CompileStatic
 class BaselineVersion implements VersionResults {
-    // Multiply standard error of mean by this factor to reduce the number of a falsely identified regressions.
-    // https://en.wikipedia.org/wiki/Standard_deviation#Rules_for_normally_distributed_data
-    static final BigDecimal NUM_STANDARD_ERRORS_FROM_MEAN = new BigDecimal("3")
-    // Margin for detecting improvements
-    static final BigDecimal NUM_STANDARD_ERRORS_FOR_IMPROVEMENT = new BigDecimal("1.5")
+    private static final double MINIMUM_CONFIDENCE = 0.95
+
     final String version
     final MeasuredOperationList results = new MeasuredOperationList()
 
@@ -39,18 +44,22 @@ class BaselineVersion implements VersionResults {
 
     String getSpeedStatsAgainst(String displayName, MeasuredOperationList current) {
         def sb = new StringBuilder()
-        def thisVersionMedian = results.totalTime.median
-        def currentVersionMedian = current.totalTime.median
-        if (currentVersionMedian && thisVersionMedian) {
-            if (currentVersionMedian > thisVersionMedian) {
-                sb.append "Speed $displayName: we're slower than $version.\n"
+        def thisVersionMean = results.totalTime.average
+        def currentVersionMean = current.totalTime.average
+        if (currentVersionMean && thisVersionMean) {
+            if (significantlyFasterThan(current)) {
+                sb.append "Speed $displayName: we're slower than $version"
+            } else if (significantlySlowerThan(current)) {
+                sb.append "Speed $displayName: AWESOME! we're faster than $version"
             } else {
-                sb.append "Speed $displayName: AWESOME! we're faster than $version :D\n"
+                sb.append "Speed $displayName: Results were inconclusive"
             }
+            String confidencePercent = confidenceInDifference(results.totalTime, current.totalTime) * 100 as int
+            sb.append(" with " + confidencePercent + "% confidence.\n")
 
-            def diff = currentVersionMedian - thisVersionMedian
+            def diff = currentVersionMean - thisVersionMean
             def desc = diff > Duration.millis(0) ? "slower" : "faster"
-            sb.append("Difference: ${diff.abs().format()} $desc (${toMillis(diff.abs())}), ${PrettyCalculator.percentChange(currentVersionMedian, thisVersionMedian)}%, max regression: ${getMaxExecutionTimeRegression(current).format()}\n")
+            sb.append("Difference: ${diff.abs().format()} $desc (${toMillis(diff.abs())}), ${PrettyCalculator.percentChange(currentVersionMean, thisVersionMean)}%\n")
             sb.append(current.speedStats)
             sb.append(results.speedStats)
             sb.append("\n")
@@ -60,19 +69,33 @@ class BaselineVersion implements VersionResults {
         }
     }
 
-    boolean fasterThan(MeasuredOperationList current) {
-        results.totalTime && current.totalTime.median - results.totalTime.median > getMaxExecutionTimeRegression(current)
+    boolean significantlyFasterThan(MeasuredOperationList other) {
+        def myTime = results.totalTime
+        def otherTime = other.totalTime
+        myTime && myTime.average < otherTime.average && differenceIsSignificant(myTime, otherTime)
     }
 
-    boolean significantlySlowerThan(MeasuredOperationList current) {
-        results.totalTime && results.totalTime.median - current.totalTime.median > getMinExecutionTimeImprovement(current)
+    boolean significantlySlowerThan(MeasuredOperationList other) {
+        def myTime = results.totalTime
+        def otherTime = other.totalTime
+        myTime && myTime.average > otherTime.average && differenceIsSignificant(myTime, otherTime)
     }
 
-    Amount<Duration> getMaxExecutionTimeRegression(MeasuredOperationList current) {
-        (results.totalTime.standardErrorOfMean + current.totalTime.standardErrorOfMean) / 2 * NUM_STANDARD_ERRORS_FROM_MEAN
+    private static boolean differenceIsSignificant(DataSeries<Duration> myTime, DataSeries<Duration> otherTime) {
+        confidenceInDifference(myTime, otherTime) > MINIMUM_CONFIDENCE
     }
 
-    Amount<Duration> getMinExecutionTimeImprovement(MeasuredOperationList current) {
-        (results.totalTime.standardError + current.totalTime.standardError) / 2 * NUM_STANDARD_ERRORS_FOR_IMPROVEMENT
+    private static double confidenceInDifference(DataSeries first, DataSeries second) {
+        def firstStats = asSummaryStats(first)
+        def secondStats = asSummaryStats(second)
+        1 - TestUtils.tTest(firstStats, secondStats)
+    }
+
+    private static SummaryStatistics asSummaryStats(DataSeries series) {
+        def stats = new SummaryStatistics()
+        series.each { Amount<?> value ->
+            stats.addValue(value.value.doubleValue())
+        }
+        stats
     }
 }
